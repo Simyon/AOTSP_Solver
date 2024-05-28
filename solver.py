@@ -81,6 +81,62 @@ class Cluster_TSP_Solver(TSP_Solver):
         pass
 
 class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
+    def __init__(self, num_clusters: int):
+        super().__init__()
+        self.num_clusters = num_clusters
+        self.clusters = {}
+
+    def nearest_neighbour_dot(self, point, convex_hull, forbidden_vertices = []):
+        index_min_vertex = 0
+        for i in range(len(convex_hull)):
+            if i not in forbidden_vertices and self.euclid_dist(point, convex_hull[i]) < self.euclid_dist(point, convex_hull[index_min_vertex]):
+                index_min_vertex = i
+        return index_min_vertex
+
+    def find_closest_vertices(self, convex_hull_1, convex_hull_2, forbidden_vertices = []):
+        if len(convex_hull_2) == 1: self.nearest_neighbour_dot(convex_hull_2[0], convex_hull_1)
+
+        min_i, min_ii, min_j, min_jj = 0, 1, 0, 1
+        min_distance = self.euclid_dist(convex_hull_1[min_i], convex_hull_2[min_j]) + self.euclid_dist(convex_hull_1[min_ii], convex_hull_1[min_jj])
+        for i in range(len(convex_hull_1)):
+            c_i, c_ii = convex_hull_1[i], convex_hull_1[(i+1) % len(convex_hull_1)]
+            if c_i in forbidden_vertices or c_ii in forbidden_vertices: continue
+            for j in range(len(convex_hull_2)):
+                c_j, c_jj = convex_hull_2[j], convex_hull_2[(j+1) % len(convex_hull_2)]
+                c_distance = self.euclid_dist(c_i, c_j) + self.euclid_dist(c_ii, c_jj)
+                if min_distance > c_distance:
+                    min_i, min_ii, min_j, min_jj = i, (i+1) % len(convex_hull_1), j, (j+1) % len(convex_hull_2)
+                    min_distance = c_distance
+
+        return min_distance, [min_i, min_ii], [min_j, min_jj]
+
+    def solve_tsp(self, convex_hullz):
+        ch_costs = []
+        patch_costs = []
+        forbidden_vertices = {}  # changed to dict, no need for deep copy
+
+        for i in range(len(convex_hullz) - 1):
+            distance, near_1, near_2 = self.find_closest_vertices(convex_hullz[i], convex_hullz[i + 1], forbidden_vertices.keys())
+            patch_costs.append(distance)
+            forbidden_vertices[i] = near_1  # changed to tuple assignment
+            forbidden_vertices[i + 1] = near_2
+
+        for i, c_h in enumerate(convex_hullz):  # changed to enumerate
+            pts = ConvexHull(c_h)
+            ex_edge = 0
+            if i in forbidden_vertices:
+                f_A, f_B = c_h[forbidden_vertices[i][0]], c_h[forbidden_vertices[i][1]]  # changed to tuple unpacking
+                ex_edge = self.euclid_dist(f_A, f_B)
+            local_cost = self.hull_distance(pts) - ex_edge
+            ch_costs.append(local_cost)
+
+        cost = sum(ch_costs) + sum(patch_costs)
+        print("ch_costs", ch_costs)
+        print("patch_costs", patch_costs)
+        print("cost", cost)
+        return cost, ch_costs, patch_costs  # added return statement
+
     def solve(self, problem: TSP_Problem) -> TSP_Solution:
-        # TODO: Реализация метода solve с использованием выпуклой оболочки
-        pass
+        cost, ch_costs, patch_costs = self.solve_tsp(convex_hullz)  # use solve_tsp to get cost
+        path = []  # TODO: generate path from convex_hullz
+        return TSP_Solution(problem, path, cost)
