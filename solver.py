@@ -117,9 +117,13 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
     def solve(self, problem: ETSP_Problem) -> TSP_Solution:
         # Извлекаем вложенные выпуклые оболочки
         nested_hulls = problem.extract_nested_hulls()
+        h_h_index = 0
+        for n_h in nested_hulls:
+            print(f"nested_hull #{h_h_index} : {[f'#{problem.coordinates.index(list(point)) + 1} -> [{point[0]}, {point[1]}]' for point in n_h]}")
+            h_h_index += 1
 
         # Комбинируем вложенные выпуклые оболочки в один цикл
-        combined_cycle = problem.combine_nested_hulls(nested_hulls)
+        combined_cycle = self.combine_nested_hulls_sequential(nested_hulls)
         
         path = []
         for point in combined_cycle:
@@ -134,3 +138,57 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
             cost += problem.matrix[from_city][to_city]
 
         return TSP_Solution(problem, path, cost)
+
+    def combine_nested_hulls_sequential(self, nested_hulls):
+        # Начинаем с самой внешней оболочки
+        if not nested_hulls:
+            return []
+
+        combined_hull = nested_hulls[0].tolist()
+
+        # Последовательно объединяем каждую следующую оболочку
+        for i in range(1, len(nested_hulls)):
+            combined_hull = self.merge_two_hulls_combined(combined_hull, nested_hulls[i-1].tolist(), nested_hulls[i].tolist())
+
+        return combined_hull
+
+    def merge_two_hulls_combined(self, combined_hull, hull1, hull2):
+        min_distance = float('inf')
+        best_pair = None
+
+        # Находим две ближайшие вершины между комбинированным циклом и новой оболочкой
+        for point1 in hull1:
+            for point2 in hull2:
+                distance = self.euclidean_distance(point1, point2)
+                if distance < min_distance:
+                    min_distance = distance
+                    best_pair = (point1, point2)
+
+        point1, point2 = best_pair
+        c_i = combined_hull.index(point1)
+        k_j = hull2.index(point2)
+
+        new_cycle = []
+
+        # Добавляем в цикл все точки combined_hull до c_i
+        new_cycle.extend(combined_hull[:c_i + 1])
+        # Добавляем в цикл точку k_j и все точки hull2 после k_j, которых ещё нет в комбинированном цикле
+        for idx in range(k_j, len(hull2)):
+            if hull2[idx] not in new_cycle:
+                new_cycle.append(hull2[idx])
+        # Добавляем в цикл все точки hull2 до k_j, которых ещё нет в комбинированном цикле
+        for idx in range(0, k_j):
+            if hull2[idx] not in new_cycle:
+                new_cycle.append(hull2[idx])
+        # Добавляем оставшиеся точки combined_hull после c_i, которых ещё нет в новом цикле
+        for idx in range(c_i + 1, len(combined_hull)):
+            if combined_hull[idx] not in new_cycle:
+                new_cycle.append(combined_hull[idx])
+
+        return new_cycle
+
+    @staticmethod
+    def euclidean_distance(coord1, coord2):
+        x1, y1 = coord1
+        x2, y2 = coord2
+        return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
