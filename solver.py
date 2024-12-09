@@ -2,6 +2,7 @@ import abc
 import math
 import tsplib95 as lib
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull   
 
 class TSP_Problem:
@@ -85,7 +86,30 @@ class TSP_Solution:
         self.cost = cost
 
     def __str__(self):
+        self.plot_route()
         return f"Path: {self.path}, Cost: {self.cost}"
+
+    def plot_route(self):
+        plt.figure(figsize=(12, 8))
+        plt.scatter([i[0] for i in self.problem.coordinates[:]], [i[1] for i in self.problem.coordinates[:]],
+                    c='black', zorder=1)
+
+        for i, coord in enumerate(self.problem.coordinates):
+            plt.annotate(str(i), xy=coord, xytext=(coord[0] + 10, coord[1]+10),
+                         fontsize=18, ha='center', va='center')
+
+        for j in range(-1, len(self.path) - 1, 1):
+            print(len(self.path), len(self.problem.coordinates), j, self.path[j], self.problem.coordinates[j])
+            start, end = self.path[j]-1, self.path[j + 1]-1
+            plt.plot([self.problem.coordinates[start][0], self.problem.coordinates[end][0]],
+                        [self.problem.coordinates[start][1], self.problem.coordinates[end][1]],
+                        color='red', linewidth=2, zorder=2)
+
+        plt.title(f"Total Route Distance: {self.cost:.2f}")
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.grid(True)
+        plt.show()
 
 class TSP_Solver(abc.ABC):
     def __init__(self):
@@ -119,7 +143,8 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
         nested_hulls = problem.extract_nested_hulls()
         h_h_index = 0
         for n_h in nested_hulls:
-            print(f"nested_hull #{h_h_index} : {[f'#{problem.coordinates.index(list(point)) + 1} -> [{point[0]}, {point[1]}]' for point in n_h]}")
+            print(f"nested_hull #{h_h_index} : "
+                  f"{[f'#{problem.coordinates.index(list(point)) + 1} -> [{point[0]}, {point[1]}]' for point in n_h]}")
             h_h_index += 1
 
         # Комбинируем вложенные выпуклые оболочки в один цикл
