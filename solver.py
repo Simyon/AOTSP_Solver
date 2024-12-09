@@ -86,7 +86,6 @@ class TSP_Solution:
         self.cost = cost
 
     def __str__(self):
-        self.plot_route()
         return f"Path: {self.path}, Cost: {self.cost}"
 
     def plot_route(self):
@@ -95,11 +94,10 @@ class TSP_Solution:
                     c='black', zorder=1)
 
         for i, coord in enumerate(self.problem.coordinates):
-            plt.annotate(str(i), xy=coord, xytext=(coord[0] + 10, coord[1]+10),
+            plt.annotate(str(i+1), xy=coord, xytext=(coord[0] + 10, coord[1]+10),
                          fontsize=18, ha='center', va='center')
 
         for j in range(-1, len(self.path) - 1, 1):
-            print(len(self.path), len(self.problem.coordinates), j, self.path[j], self.problem.coordinates[j])
             start, end = self.path[j]-1, self.path[j + 1]-1
             plt.plot([self.problem.coordinates[start][0], self.problem.coordinates[end][0]],
                         [self.problem.coordinates[start][1], self.problem.coordinates[end][1]],
@@ -148,7 +146,7 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
             h_h_index += 1
 
         # Комбинируем вложенные выпуклые оболочки в один цикл
-        combined_cycle = self.combine_nested_hulls_sequential(nested_hulls)
+        combined_cycle = self.combine_nested_hulls_sequential(nested_hulls[:2])
         
         path = []
         for point in combined_cycle:

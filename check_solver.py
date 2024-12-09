@@ -14,9 +14,9 @@ def test_convex_hull_solver():
     # Создаем решатель ConvexHull_TSP_Solver и решаем задачу
     solver = ConvexHull_TSP_Solver(num_clusters=1)  # num_clusters в данном случае не используется
     solution = solver.solve(problem)
-    
     print("Решение задачи TSP:")
     print(solution)
+    solution.plot_route()
 
 if __name__ == "__main__":
     print("Тест решателя ConvexHull_TSP_Solver:")
