@@ -3,7 +3,7 @@ import math
 import tsplib95 as lib
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.spatial import ConvexHull   
+from scipy.spatial import ConvexHull
 
 class TSP_Problem:
     def __init__(self, matrix):
@@ -25,12 +25,26 @@ class ETSP_Problem(TSP_Problem):
     @classmethod
     def load_tsplib(cls, path: str):
         problem = lib.load(path)
-        
+
         coordinates = [problem.node_coords[i] for i in list(problem.get_nodes())]
         n = len(coordinates)
-        
+
         matrix = np.zeros((n, n))
-        
+
+        for from_counter, from_node in enumerate(coordinates):
+            for to_counter, to_node in enumerate(coordinates):
+                if from_counter == to_counter:
+                    matrix[from_counter, to_counter] = 0
+                else:
+                    matrix[from_counter, to_counter] = cls.euclidean_distance(from_node, to_node)
+
+        return cls(matrix, coordinates)
+
+    @classmethod
+    def from_coordinates(cls, coordinates):
+        n = len(coordinates)
+        matrix = np.zeros((n, n))
+
         for from_counter, from_node in enumerate(coordinates):
             for to_counter, to_node in enumerate(coordinates):
                 if from_counter == to_counter:
@@ -147,11 +161,11 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
 
         # Комбинируем вложенные выпуклые оболочки в один цикл
         combined_cycle = self.combine_nested_hulls_sequential(nested_hulls[:2])
-        
+
         path = []
         for point in combined_cycle:
             index = problem.coordinates.index(list(point))
-            path.append(index + 1)  
+            path.append(index + 1)
 
         # Вычисляем стоимость маршрута
         cost = 0
