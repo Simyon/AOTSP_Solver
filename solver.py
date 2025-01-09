@@ -61,37 +61,64 @@ class ETSP_Problem(TSP_Problem):
         distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
         return distance
 
-    def extract_convex_hull(self):
-        points = np.array(self.coordinates)
-        hull = ConvexHull(points)
-        hull_points = points[hull.vertices]
-        return hull_points, hull.vertices
+    # Функция для проверки, находится ли точка на отрезках выпуклой оболочки
+    def point_on_sections(self, point_, secs_):
+      EPS_ON_SECTIONS = 0.1
+      def dist(p1, p2):
+          return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+      
+      for sec in secs_:
+          if abs(dist(point_, sec[0]) + dist(point_, sec[1]) - dist(sec[0], sec[1])) <= EPS_ON_SECTIONS:
+              return True
+          
+      return False
 
+    # Функция для определения всех точек, лежащих на выпуклой оболочке с учетом точек на гранях
+    def points_on_hull(self, points_, hull_):
+      hull_points = set(hull_)  
+      secs = []
+      for i in range(len(hull_)):
+          secs.append((points_[hull_[i]], points_[hull_[i-1]]))
+
+      for num, point in enumerate(points_):
+          if num not in hull_points and self.point_on_sections(point, secs): 
+              hull_points.add(num)
+      
+      return np.array(list(hull_points))
+
+    def sort_points_by_polar_angle(self, points):
+      center_x = np.mean(points[:, 0])
+      center_y = np.mean(points[:, 1])
+      
+      def polar_angle(point):
+          return math.atan2(point[1] - center_y, point[0] - center_x)
+
+      sorted_points = sorted(points, key=polar_angle)
+      return np.array(sorted_points)
+
+    # Основная функция для выделения вложенных выпуклых оболочек
     def extract_nested_hulls(self):
-        remaining_points = np.array(self.coordinates)
-        nested_hulls = []
+      remaining_points = np.array(self.coordinates)
+      nested_hulls = []
 
-        while len(remaining_points) > 3:
-            hull = ConvexHull(remaining_points)
-            hull_points = remaining_points[hull.vertices]
-            nested_hulls.append(hull_points)
-            remaining_points = np.delete(remaining_points, hull.vertices, axis=0)
+      while len(remaining_points) > 3:
+          hull = ConvexHull(remaining_points)
+          hull_vertices = hull.vertices
+          
+          # Получаем все индексы точек на границе, включая лежащие на отрезках
+          extended_hull_indices = self.points_on_hull(remaining_points, hull_vertices)
+          extended_hull_points = remaining_points[extended_hull_indices]
 
-        if len(remaining_points) > 0:
-            nested_hulls.append(remaining_points)
+          # Сортируем точки оболочки по полярному углу
+          sorted_hull_points = self.sort_points_by_polar_angle(extended_hull_points)
+          
+          nested_hulls.append(sorted_hull_points)          
+          remaining_points = np.delete(remaining_points, extended_hull_indices, axis=0)
 
-        return nested_hulls
+      if len(remaining_points) > 0:
+          nested_hulls.append(remaining_points)
 
-    def combine_nested_hulls(self, nested_hulls):
-        cycle = []
-
-        # Начинаем с внешней оболочки
-        for hull in nested_hulls:
-            for point in hull:
-                if list(point) not in cycle:
-                    cycle.append(list(point))
-
-        return cycle
+      return nested_hulls 
 
 class TSP_Solution:
     def __init__(self, problem, path, cost):
