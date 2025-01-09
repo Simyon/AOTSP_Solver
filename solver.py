@@ -177,6 +177,61 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
     def __init__(self, num_clusters: int):
         super().__init__(num_clusters)
 
+    def create_distance_matrix(self, points):
+      points = np.array(points)
+      size = len(points)
+      distance_matrix = np.zeros((size, size))
+      for i in range(size):
+          for j in range(size):
+              if i != j:
+                  distance_matrix[i][j] = np.linalg.norm(points[i] - points[j])
+      return distance_matrix
+
+    # Функция для объединения двух кластеров
+    def merge_routes(self, route1, route2, distance_matrix):
+      coordinates_to_index = {tuple(coord): idx for idx, coord in enumerate(self.coordinates)}
+
+      min_distance = float('inf')
+      best_i, best_j = -1, -1
+      ij_flag = 0
+
+      for i in range(len(route1) - 1):
+          for j in range(len(route2) - 1):
+              index1_i = coordinates_to_index[tuple(route1[i])]
+              index1_i1 = coordinates_to_index[tuple(route1[i + 1])]
+              index2_j = coordinates_to_index[tuple(route2[j])]
+              index2_j1 = coordinates_to_index[tuple(route2[j + 1])]
+
+              dist1 = distance_matrix[index1_i][index2_j] + distance_matrix[index2_j1][index1_i1] - distance_matrix[index1_i][index1_i1] - distance_matrix[index2_j][index2_j1]
+              dist2 = distance_matrix[index1_i][index2_j1] + distance_matrix[index2_j][index1_i1] - distance_matrix[index1_i][index1_i1] - distance_matrix[index2_j][index2_j1]
+
+              if min(dist1, dist2) < min_distance:
+                  min_distance = min(dist1, dist2)
+                  best_i, best_j = i, j
+                  ij_flag = 1 if dist1 < dist2 else 0
+
+      if ij_flag:
+          new_route = route1[:best_i + 1] + list(reversed(route2[:best_j + 1])) + list(reversed(route2[best_j + 1:])) + route1[best_i + 1:]
+      else:
+          new_route = route1[:best_i + 1] + route2[best_j + 1:] + route2[:best_j + 1] + route1[best_i + 1:]
+          
+      new_route = list(dict.fromkeys(tuple(point) for point in new_route))
+      return new_route
+
+    def combine_nested_hulls_sequential(self, nested_hulls, coordinates):
+      self.coordinates = coordinates  
+      if not nested_hulls:
+          return []
+
+      combined_hull = nested_hulls[0].tolist()
+      distance_matrix = self.create_distance_matrix(coordinates)
+
+      for i in range(1, len(nested_hulls)):
+          combined_hull = self.merge_routes(combined_hull, nested_hulls[i].tolist(), distance_matrix)
+          
+      return combined_hull
+
+    
     def solve(self, problem: ETSP_Problem) -> TSP_Solution:
         # Извлекаем вложенные выпуклые оболочки
         nested_hulls = problem.extract_nested_hulls()
@@ -187,7 +242,7 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
             h_h_index += 1
 
         # Комбинируем вложенные выпуклые оболочки в один цикл
-        combined_cycle = self.combine_nested_hulls_sequential(nested_hulls[:2])
+        combined_cycle = self.combine_nested_hulls_sequential(nested_hulls, problem.coordinates)
 
         path = []
         for point in combined_cycle:
@@ -202,54 +257,6 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
             cost += problem.matrix[from_city][to_city]
 
         return TSP_Solution(problem, path, cost)
-
-    def combine_nested_hulls_sequential(self, nested_hulls):
-        # Начинаем с самой внешней оболочки
-        if not nested_hulls:
-            return []
-
-        combined_hull = nested_hulls[0].tolist()
-
-        # Последовательно объединяем каждую следующую оболочку
-        for i in range(1, len(nested_hulls)):
-            combined_hull = self.merge_two_hulls_combined(combined_hull, nested_hulls[i-1].tolist(), nested_hulls[i].tolist())
-
-        return combined_hull
-
-    def merge_two_hulls_combined(self, combined_hull, hull1, hull2):
-        min_distance = float('inf')
-        best_pair = None
-
-        # Находим две ближайшие вершины между комбинированным циклом и новой оболочкой
-        for point1 in hull1:
-            for point2 in hull2:
-                distance = self.euclidean_distance(point1, point2)
-                if distance < min_distance:
-                    min_distance = distance
-                    best_pair = (point1, point2)
-
-        point1, point2 = best_pair
-        c_i = combined_hull.index(point1)
-        k_j = hull2.index(point2)
-
-        new_cycle = []
-
-        # Добавляем в цикл все точки combined_hull до c_i
-        new_cycle.extend(combined_hull[:c_i + 1])
-        # Добавляем в цикл точку k_j и все точки hull2 после k_j, которых ещё нет в комбинированном цикле
-        for idx in range(k_j, len(hull2)):
-            if hull2[idx] not in new_cycle:
-                new_cycle.append(hull2[idx])
-        # Добавляем в цикл все точки hull2 до k_j, которых ещё нет в комбинированном цикле
-        for idx in range(0, k_j):
-            if hull2[idx] not in new_cycle:
-                new_cycle.append(hull2[idx])
-        # Добавляем оставшиеся точки combined_hull после c_i, которых ещё нет в новом цикле
-        for idx in range(c_i + 1, len(combined_hull)):
-            if combined_hull[idx] not in new_cycle:
-                new_cycle.append(combined_hull[idx])
-
-        return new_cycle
 
     @staticmethod
     def euclidean_distance(coord1, coord2):
