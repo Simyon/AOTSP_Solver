@@ -15,15 +15,16 @@ class TSP_Problem:
         return cls(matrix)
 
 class ETSP_Problem(TSP_Problem):
-    def __init__(self, matrix, coordinates=None):
+    def __init__(self, matrix, coordinates=None, eps_on_sections=0.1):
         super().__init__(matrix)
+        self.eps_on_sections = eps_on_sections
         if coordinates is None:
             self.coordinates = self.matrix_to_coordinates()
         else:
             self.coordinates = coordinates
 
     @classmethod
-    def load_tsplib(cls, path: str):
+    def load_tsplib(cls, path: str, eps_on_sections=0.1):
         problem = lib.load(path)
 
         coordinates = [problem.node_coords[i] for i in list(problem.get_nodes())]
@@ -38,10 +39,10 @@ class ETSP_Problem(TSP_Problem):
                 else:
                     matrix[from_counter, to_counter] = cls.euclidean_distance(from_node, to_node)
 
-        return cls(matrix, coordinates)
+        return cls(matrix, coordinates, eps_on_sections)
 
     @classmethod
-    def from_coordinates(cls, coordinates):
+    def from_coordinates(cls, coordinates, eps_on_sections=0.1):
         n = len(coordinates)
         matrix = np.zeros((n, n))
 
@@ -52,7 +53,7 @@ class ETSP_Problem(TSP_Problem):
                 else:
                     matrix[from_counter, to_counter] = cls.euclidean_distance(from_node, to_node)
 
-        return cls(matrix, coordinates)
+        return cls(matrix, coordinates, eps_on_sections)
 
     @staticmethod
     def euclidean_distance(coord1, coord2):
@@ -63,62 +64,61 @@ class ETSP_Problem(TSP_Problem):
 
     # Функция для проверки, находится ли точка на отрезках выпуклой оболочки
     def point_on_sections(self, point_, secs_):
-      EPS_ON_SECTIONS = 0.1
-      def dist(p1, p2):
-          return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
-      
-      for sec in secs_:
-          if abs(dist(point_, sec[0]) + dist(point_, sec[1]) - dist(sec[0], sec[1])) <= EPS_ON_SECTIONS:
-              return True
-          
-      return False
+        def dist(p1, p2):
+            return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+        for sec in secs_:
+            if abs(dist(point_, sec[0]) + dist(point_, sec[1]) - dist(sec[0], sec[1])) <= self.eps_on_sections:
+                return True
+
+        return False
 
     # Функция для определения всех точек, лежащих на выпуклой оболочке с учетом точек на гранях
     def points_on_hull(self, points_, hull_):
-      hull_points = set(hull_)  
-      secs = []
-      for i in range(len(hull_)):
-          secs.append((points_[hull_[i]], points_[hull_[i-1]]))
+        hull_points = set(hull_)
+        secs = []
+        for i in range(len(hull_)):
+            secs.append((points_[hull_[i]], points_[hull_[i-1]]))
 
-      for num, point in enumerate(points_):
-          if num not in hull_points and self.point_on_sections(point, secs): 
-              hull_points.add(num)
-      
-      return np.array(list(hull_points))
+        for num, point in enumerate(points_):
+            if num not in hull_points and self.point_on_sections(point, secs):
+                hull_points.add(num)
+
+        return np.array(list(hull_points))
 
     def sort_points_by_polar_angle(self, points):
-      center_x = np.mean(points[:, 0])
-      center_y = np.mean(points[:, 1])
-      
-      def polar_angle(point):
-          return math.atan2(point[1] - center_y, point[0] - center_x)
+        center_x = np.mean(points[:, 0])
+        center_y = np.mean(points[:, 1])
 
-      sorted_points = sorted(points, key=polar_angle)
-      return np.array(sorted_points)
+        def polar_angle(point):
+            return math.atan2(point[1] - center_y, point[0] - center_x)
+
+        sorted_points = sorted(points, key=polar_angle)
+        return np.array(sorted_points)
 
     # Основная функция для выделения вложенных выпуклых оболочек
     def extract_nested_hulls(self):
-      remaining_points = np.array(self.coordinates)
-      nested_hulls = []
+        remaining_points = np.array(self.coordinates)
+        nested_hulls = []
 
-      while len(remaining_points) > 3:
-          hull = ConvexHull(remaining_points)
-          hull_vertices = hull.vertices
-          
-          # Получаем все индексы точек на границе, включая лежащие на отрезках
-          extended_hull_indices = self.points_on_hull(remaining_points, hull_vertices)
-          extended_hull_points = remaining_points[extended_hull_indices]
+        while len(remaining_points) > 3:
+            hull = ConvexHull(remaining_points)
+            hull_vertices = hull.vertices
 
-          # Сортируем точки оболочки по полярному углу
-          sorted_hull_points = self.sort_points_by_polar_angle(extended_hull_points)
-          
-          nested_hulls.append(sorted_hull_points)          
-          remaining_points = np.delete(remaining_points, extended_hull_indices, axis=0)
+            # Получаем все индексы точек на границе, включая лежащие на отрезках
+            extended_hull_indices = self.points_on_hull(remaining_points, hull_vertices)
+            extended_hull_points = remaining_points[extended_hull_indices]
 
-      if len(remaining_points) > 0:
-          nested_hulls.append(remaining_points)
+            # Сортируем точки оболочки по полярному углу
+            sorted_hull_points = self.sort_points_by_polar_angle(extended_hull_points)
 
-      return nested_hulls 
+            nested_hulls.append(sorted_hull_points)
+            remaining_points = np.delete(remaining_points, extended_hull_indices, axis=0)
+
+        if len(remaining_points) > 0:
+            nested_hulls.append(remaining_points)
+
+        return nested_hulls
 
 class TSP_Solution:
     def __init__(self, problem, path, cost):
@@ -178,60 +178,59 @@ class ConvexHull_TSP_Solver(Cluster_TSP_Solver):
         super().__init__(num_clusters)
 
     def create_distance_matrix(self, points):
-      points = np.array(points)
-      size = len(points)
-      distance_matrix = np.zeros((size, size))
-      for i in range(size):
-          for j in range(size):
-              if i != j:
-                  distance_matrix[i][j] = np.linalg.norm(points[i] - points[j])
-      return distance_matrix
+        points = np.array(points)
+        size = len(points)
+        distance_matrix = np.zeros((size, size))
+        for i in range(size):
+            for j in range(size):
+                if i != j:
+                    distance_matrix[i][j] = np.linalg.norm(points[i] - points[j])
+        return distance_matrix
 
     # Функция для объединения двух кластеров
     def merge_routes(self, route1, route2, distance_matrix):
-      coordinates_to_index = {tuple(coord): idx for idx, coord in enumerate(self.coordinates)}
+        coordinates_to_index = {tuple(coord): idx for idx, coord in enumerate(self.coordinates)}
 
-      min_distance = float('inf')
-      best_i, best_j = -1, -1
-      ij_flag = 0
+        min_distance = float('inf')
+        best_i, best_j = -1, -1
+        ij_flag = 0
 
-      for i in range(len(route1) - 1):
-          for j in range(len(route2) - 1):
-              index1_i = coordinates_to_index[tuple(route1[i])]
-              index1_i1 = coordinates_to_index[tuple(route1[i + 1])]
-              index2_j = coordinates_to_index[tuple(route2[j])]
-              index2_j1 = coordinates_to_index[tuple(route2[j + 1])]
+        for i in range(len(route1) - 1):
+            for j in range(len(route2) - 1):
+                index1_i = coordinates_to_index[tuple(route1[i])]
+                index1_i1 = coordinates_to_index[tuple(route1[i + 1])]
+                index2_j = coordinates_to_index[tuple(route2[j])]
+                index2_j1 = coordinates_to_index[tuple(route2[j + 1])]
 
-              dist1 = distance_matrix[index1_i][index2_j] + distance_matrix[index2_j1][index1_i1] - distance_matrix[index1_i][index1_i1] - distance_matrix[index2_j][index2_j1]
-              dist2 = distance_matrix[index1_i][index2_j1] + distance_matrix[index2_j][index1_i1] - distance_matrix[index1_i][index1_i1] - distance_matrix[index2_j][index2_j1]
+                dist1 = distance_matrix[index1_i][index2_j] + distance_matrix[index2_j1][index1_i1] - distance_matrix[index1_i][index1_i1] - distance_matrix[index2_j][index2_j1]
+                dist2 = distance_matrix[index1_i][index2_j1] + distance_matrix[index2_j][index1_i1] - distance_matrix[index1_i][index1_i1] - distance_matrix[index2_j][index2_j1]
 
-              if min(dist1, dist2) < min_distance:
-                  min_distance = min(dist1, dist2)
-                  best_i, best_j = i, j
-                  ij_flag = 1 if dist1 < dist2 else 0
+                if min(dist1, dist2) < min_distance:
+                    min_distance = min(dist1, dist2)
+                    best_i, best_j = i, j
+                    ij_flag = 1 if dist1 < dist2 else 0
 
-      if ij_flag:
-          new_route = route1[:best_i + 1] + list(reversed(route2[:best_j + 1])) + list(reversed(route2[best_j + 1:])) + route1[best_i + 1:]
-      else:
-          new_route = route1[:best_i + 1] + route2[best_j + 1:] + route2[:best_j + 1] + route1[best_i + 1:]
-          
-      new_route = list(dict.fromkeys(tuple(point) for point in new_route))
-      return new_route
+        if ij_flag:
+            new_route = route1[:best_i + 1] + list(reversed(route2[:best_j + 1])) + list(reversed(route2[best_j + 1:])) + route1[best_i + 1:]
+        else:
+            new_route = route1[:best_i + 1] + route2[best_j + 1:] + route2[:best_j + 1] + route1[best_i + 1:]
+
+        new_route = list(dict.fromkeys(tuple(point) for point in new_route))
+        return new_route
 
     def combine_nested_hulls_sequential(self, nested_hulls, coordinates):
-      self.coordinates = coordinates  
-      if not nested_hulls:
-          return []
+        self.coordinates = coordinates
+        if not nested_hulls:
+            return []
 
-      combined_hull = nested_hulls[0].tolist()
-      distance_matrix = self.create_distance_matrix(coordinates)
+        combined_hull = nested_hulls[0].tolist()
+        distance_matrix = self.create_distance_matrix(coordinates)
 
-      for i in range(1, len(nested_hulls)):
-          combined_hull = self.merge_routes(combined_hull, nested_hulls[i].tolist(), distance_matrix)
-          
-      return combined_hull
+        for i in range(1, len(nested_hulls)):
+            combined_hull = self.merge_routes(combined_hull, nested_hulls[i].tolist(), distance_matrix)
 
-    
+        return combined_hull
+
     def solve(self, problem: ETSP_Problem) -> TSP_Solution:
         # Извлекаем вложенные выпуклые оболочки
         nested_hulls = problem.extract_nested_hulls()
