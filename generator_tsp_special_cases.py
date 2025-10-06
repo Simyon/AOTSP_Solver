@@ -95,6 +95,45 @@ def generate_convex_hull(n: int, radius: int = 10, noise: float = 0.0, seed=None
     points = np.column_stack((x, y))
     return points
 
+def calculate_homothety_coefficient(n):
+    """
+    Вычисляет коэффициент гомотетии для правильного выпуклого многоугольника с n вершинами.
+    """
+    if n < 3:
+        raise ValueError("n должно быть не менее 3")
+    angle = 2 * np.pi / n
+    sqrt_term = np.sqrt(2 * (1 - np.cos(angle)))
+    coefficient = (2 + sqrt_term) / (2 - sqrt_term) - 1
+    return coefficient
+
+# MULTI-CONVEX HULL TSP
+def generate_nested_convex_hulls(num_shells, n, base_radius=10, noise=0.0, seed=None):
+    """
+    Генерирует вложенные выпуклые оболочки.
+
+    Параметры:
+        num_shells: int — количество вложенных оболочек.
+        n: int — количество точек на каждой оболочке.
+        base_radius: float — радиус внешней оболочки.
+        noise: float — добавочный шум для радиуса.
+        seed: int или None — случайное зерно.
+
+    Возвращает:
+        List[np.ndarray] — список массивов точек для каждой оболочки.
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    shells = []
+    homothety_coeff = calculate_homothety_coefficient(n)
+    constant = 13  
+
+    for i in range(num_shells):
+        current_radius = base_radius / (1 + homothety_coeff * constant * (i + 1))
+        points = generate_convex_hull(n, current_radius, noise, seed)
+        shells.append(points)
+
+    return shells
 
 # CONVEX HULL AND LINE TSP
 def random_point_in_convex_polygon(vertices, seed=None):
